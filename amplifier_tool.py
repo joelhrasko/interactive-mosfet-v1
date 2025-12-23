@@ -39,29 +39,27 @@ gain = -gm_per_A * rd_total
 # --- 4. DYNAMIC SCHEMATIC DRAWING ---
 st.subheader("Circuit Schematic")
 
-# We create the drawing without the 'with' context manager to avoid display errors
-# if something goes wrong during element addition.
+# We create the drawing explicitly
 d = schemdraw.Drawing()
 d.config(unit=2.5) # Scale of drawing
 
-# Draw the MOSFET (Using NFet instead of Mosfet)
+# *** THE FIX IS HERE: Using NFet() instead of Mosfet() ***
 Q1 = d.add(elm.NFet().label('M1'))
 
 # Draw Source (Grounded as requested)
 d.add(elm.Ground().at(Q1.source))
 
 # Draw Drain Network
-# If user checked "Add Parallel", we visually draw two resistors
 if add_parallel_rd:
     d.add(elm.Line().up(1.0).at(Q1.drain))
     d.add(elm.Dot())
     
     # Branch 1 (Left)
-    d.push() # Save current position
+    d.push()
     d.add(elm.Line().left(1.0))
     d.add(elm.Resistor().down().label(f'{rd_base}Ω', loc='bottom'))
     d.add(elm.Line().right(1.0))
-    d.pop()  # Return to dot
+    d.pop()
     
     # Branch 2 (Right)
     d.add(elm.Line().right(1.0))
@@ -69,7 +67,7 @@ if add_parallel_rd:
     d.add(elm.Line().left(1.0))
     
     # Reconnect to VDD
-    d.add(elm.Line().up(1.5).at(Q1.drain)) # Go up past the parallel mess
+    d.add(elm.Line().up(1.5).at(Q1.drain))
     d.add(elm.Vdd().label('VDD'))
     
 else:
@@ -87,7 +85,7 @@ d.add(elm.Line().left().length(0.5))
 d.add(elm.SourceSin().label('Vin'))
 d.add(elm.Ground())
 
-# Draw and display specifically for Streamlit
+# Display the plot
 fig = d.draw()
 st.pyplot(fig)
 
@@ -99,7 +97,6 @@ with col1:
     st.metric(label="Total Drain Resistance", value=f"{rd_total:.1f} Ω")
 
 with col2:
-    # Color code the gain: Green if high, Red if low (just for fun UI)
     st.metric(label="Calculated DC Gain (Av)", value=f"{gain:.2f} V/V")
 
 st.info("Note: Gain assumes an ideal current source load behavior approximation for demonstration.")
