@@ -87,7 +87,7 @@ d.add(elm.Ground())
 
 # FINAL DRAW STEP: We explicitly get the figure and pass it to Streamlit
 fig = d.draw()
-st.pyplot(fig)
+st.pyplot(fig.fig)
 
 # --- 5. RESULTS DISPLAY ---
 st.divider()
