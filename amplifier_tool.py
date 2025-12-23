@@ -37,60 +37,59 @@ gm_per_A = 20e-3 # Simplified transconductance parameter for estimation
 gain = -gm_per_A * rd_total
 
 # --- 4. DYNAMIC SCHEMATIC DRAWING ---
-# We use Schemdraw to draw the circuit based on the sidebar state
 st.subheader("Circuit Schematic")
 
-with schemdraw.Drawing() as d:
-    d.config(unit=2.5) # Scale of drawing
-    
-    # Draw the MOSFET (NMOS)
-    # 'anchor' allows us to attach other components to specific parts of the MOSFET
-    Q1 = d.add(elm.Mosfet(kind='nmos').label('M1'))
-    
-    # Draw Source (Grounded as requested)
-    d.add(elm.Ground().at(Q1.source))
-    
-    # Draw Drain Network
-    # If user checked "Add Parallel", we visually draw two resistors
-    if add_parallel_rd:
-        d.add(elm.Line().up(1.0).at(Q1.drain))
-        d.add(elm.Dot())
-        
-        # Branch 1 (Left)
-        d.push() # Save current position
-        d.add(elm.Line().left(1.0))
-        d.add(elm.Resistor().down().label(f'{rd_base}Ω', loc='bottom'))
-        d.add(elm.Line().right(1.0))
-        d.pop()  # Return to dot
-        
-        # Branch 2 (Right)
-        d.add(elm.Line().right(1.0))
-        d.add(elm.Resistor().down().label(f'{rd_parallel}Ω', loc='bottom'))
-        d.add(elm.Line().left(1.0))
-        
-        # Reconnect to VDD
-        d.add(elm.Line().up(1.5).at(Q1.drain)) # Go up past the parallel mess
-        d.add(elm.Vdd().label('VDD'))
-        
-    else:
-        # Standard Single Resistor drawing
-        d.add(elm.Resistor().up().at(Q1.drain).label(f'Rd\n{rd_total}Ω'))
-        d.add(elm.Vdd().label('VDD'))
+# We create the drawing without the 'with' context manager to avoid display errors
+# if something goes wrong during element addition.
+d = schemdraw.Drawing()
+d.config(unit=2.5) # Scale of drawing
 
-    # Draw Gate Network
-    d.add(elm.Line().left().at(Q1.gate).length(1))
-    d.add(elm.Resistor().left().label(f'Rg\n{rg_val}Ω'))
+# Draw the MOSFET (Using NFet instead of Mosfet)
+Q1 = d.add(elm.NFet().label('M1'))
+
+# Draw Source (Grounded as requested)
+d.add(elm.Ground().at(Q1.source))
+
+# Draw Drain Network
+# If user checked "Add Parallel", we visually draw two resistors
+if add_parallel_rd:
+    d.add(elm.Line().up(1.0).at(Q1.drain))
     d.add(elm.Dot())
     
-    # Input label
-    d.add(elm.Line().left().length(0.5))
-    d.add(elm.SourceSin().label('Vin'))
-    d.add(elm.Ground())
+    # Branch 1 (Left)
+    d.push() # Save current position
+    d.add(elm.Line().left(1.0))
+    d.add(elm.Resistor().down().label(f'{rd_base}Ω', loc='bottom'))
+    d.add(elm.Line().right(1.0))
+    d.pop()  # Return to dot
+    
+    # Branch 2 (Right)
+    d.add(elm.Line().right(1.0))
+    d.add(elm.Resistor().down().label(f'{rd_parallel}Ω', loc='bottom'))
+    d.add(elm.Line().left(1.0))
+    
+    # Reconnect to VDD
+    d.add(elm.Line().up(1.5).at(Q1.drain)) # Go up past the parallel mess
+    d.add(elm.Vdd().label('VDD'))
+    
+else:
+    # Standard Single Resistor drawing
+    d.add(elm.Resistor().up().at(Q1.drain).label(f'Rd\n{rd_total}Ω'))
+    d.add(elm.Vdd().label('VDD'))
 
-    # Save the drawing to a buffer to display in Streamlit
-    # schemdraw works with Matplotlib backend
-    fig = d.draw()
-    st.pyplot(fig)
+# Draw Gate Network
+d.add(elm.Line().left().at(Q1.gate).length(1))
+d.add(elm.Resistor().left().label(f'Rg\n{rg_val}Ω'))
+d.add(elm.Dot())
+
+# Input label
+d.add(elm.Line().left().length(0.5))
+d.add(elm.SourceSin().label('Vin'))
+d.add(elm.Ground())
+
+# Draw and display specifically for Streamlit
+fig = d.draw()
+st.pyplot(fig)
 
 # --- 5. RESULTS DISPLAY ---
 st.divider()
