@@ -33,64 +33,61 @@ gm_per_A = 20e-3 # Simplified transconductance parameter for estimation
 
 # --- 3. THE MATH ENGINE ---
 # Simple Common Source Gain Approximation: Av = -gm * Rd
-# We assume a small bias current to get a theoretical gm
 gain = -gm_per_A * rd_total
 
 # --- 4. DYNAMIC SCHEMATIC DRAWING ---
-# We use Schemdraw to draw the circuit based on the sidebar state
 st.subheader("Circuit Schematic")
 
-with schemdraw.Drawing() as d:
-    d.config(unit=2.5) # Scale of drawing
-    
-    # Draw the MOSFET (NMOS)
-    # 'anchor' allows us to attach other components to specific parts of the MOSFET
-    Q1 = d.add(elm.Mosfet(kind='nmos').label('M1'))
-    
-    # Draw Source (Grounded as requested)
-    d.add(elm.Ground().at(Q1.source))
-    
-    # Draw Drain Network
-    # If user checked "Add Parallel", we visually draw two resistors
-    if add_parallel_rd:
-        d.add(elm.Line().up(1.0).at(Q1.drain))
-        d.add(elm.Dot())
-        
-        # Branch 1 (Left)
-        d.push() # Save current position
-        d.add(elm.Line().left(1.0))
-        d.add(elm.Resistor().down().label(f'{rd_base}Ω', loc='bottom'))
-        d.add(elm.Line().right(1.0))
-        d.pop()  # Return to dot
-        
-        # Branch 2 (Right)
-        d.add(elm.Line().right(1.0))
-        d.add(elm.Resistor().down().label(f'{rd_parallel}Ω', loc='bottom'))
-        d.add(elm.Line().left(1.0))
-        
-        # Reconnect to VDD
-        d.add(elm.Line().up(1.5).at(Q1.drain)) # Go up past the parallel mess
-        d.add(elm.Vdd().label('VDD'))
-        
-    else:
-        # Standard Single Resistor drawing
-        d.add(elm.Resistor().up().at(Q1.drain).label(f'Rd\n{rd_total}Ω'))
-        d.add(elm.Vdd().label('VDD'))
+# CRITICAL FIX: We do NOT use 'with schemdraw.Drawing() as d'
+# We initiate the class manually to prevent Streamlit from crashing on auto-show.
+d = schemdraw.Drawing()
+d.config(unit=2.5) 
 
-    # Draw Gate Network
-    d.add(elm.Line().left().at(Q1.gate).length(1))
-    d.add(elm.Resistor().left().label(f'Rg\n{rg_val}Ω'))
+# Draw the MOSFET (Using NFet)
+Q1 = d.add(elm.NFet().label('M1'))
+
+# Draw Source (Grounded)
+d.add(elm.Ground().at(Q1.source))
+
+# Draw Drain Network
+if add_parallel_rd:
+    d.add(elm.Line().up(1.0).at(Q1.drain))
     d.add(elm.Dot())
     
-    # Input label
-    d.add(elm.Line().left().length(0.5))
-    d.add(elm.SourceSin().label('Vin'))
-    d.add(elm.Ground())
+    # Branch 1 (Left)
+    d.push()
+    d.add(elm.Line().left(1.0))
+    d.add(elm.Resistor().down().label(f'{rd_base}Ω', loc='bottom'))
+    d.add(elm.Line().right(1.0))
+    d.pop()
+    
+    # Branch 2 (Right)
+    d.add(elm.Line().right(1.0))
+    d.add(elm.Resistor().down().label(f'{rd_parallel}Ω', loc='bottom'))
+    d.add(elm.Line().left(1.0))
+    
+    # Reconnect to VDD
+    d.add(elm.Line().up(1.5).at(Q1.drain))
+    d.add(elm.Vdd().label('VDD'))
+    
+else:
+    # Standard Single Resistor drawing
+    d.add(elm.Resistor().up().at(Q1.drain).label(f'Rd\n{rd_total}Ω'))
+    d.add(elm.Vdd().label('VDD'))
 
-    # Save the drawing to a buffer to display in Streamlit
-    # schemdraw works with Matplotlib backend
-    fig = d.draw()
-    st.pyplot(fig)
+# Draw Gate Network
+d.add(elm.Line().left().at(Q1.gate).length(1))
+d.add(elm.Resistor().left().label(f'Rg\n{rg_val}Ω'))
+d.add(elm.Dot())
+
+# Input label
+d.add(elm.Line().left().length(0.5))
+d.add(elm.SourceSin().label('Vin'))
+d.add(elm.Ground())
+
+# FINAL DRAW STEP: We explicitly get the figure and pass it to Streamlit
+fig = d.draw()
+st.pyplot(fig)
 
 # --- 5. RESULTS DISPLAY ---
 st.divider()
@@ -100,7 +97,6 @@ with col1:
     st.metric(label="Total Drain Resistance", value=f"{rd_total:.1f} Ω")
 
 with col2:
-    # Color code the gain: Green if high, Red if low (just for fun UI)
     st.metric(label="Calculated DC Gain (Av)", value=f"{gain:.2f} V/V")
 
 st.info("Note: Gain assumes an ideal current source load behavior approximation for demonstration.")
