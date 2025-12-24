@@ -169,7 +169,7 @@ if s1_add_gate_div:
 # 2. MOSFET M1 (FLIPPED to get Gate on Left)
 # IMPORTANT: We use flip=True because the default symbol has the gate on the Right.
 # anchor('gate') attaches the Gate (Left side) to the previous resistor.
-Q1 = d.add(elm.NFet(flip=False).anchor('gate').label('$M_1$'))
+Q1 = d.add(elm.PFet(flip=False).anchor('gate').label('$M_1$'))
 
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
