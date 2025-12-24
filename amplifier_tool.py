@@ -116,7 +116,7 @@ if s1_add_gate_div:
 # We anchor the Gate to the current position
 Q1 = d.add(elm.NFet().anchor('gate').label('$M_1$'))
 
-# *** FIX: Changed .text() to .label() here ***
+# Add Labels for D, G, S (Using correct .label syntax)
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
@@ -171,7 +171,7 @@ if enable_stage_2:
     # MOSFET M2
     Q2 = d.add(elm.NFet().anchor('gate').label('$M_2$'))
     
-    # *** FIX: Changed .text() to .label() here ***
+    # M2 Labels (Using correct .label syntax)
     d.add(elm.Label().at(Q2.gate).label('G', loc='left', color='blue'))
     d.add(elm.Label().at(Q2.drain).label('D', loc='top', color='blue'))
     d.add(elm.Label().at(Q2.source).label('S', loc='bottom', color='blue'))
@@ -215,4 +215,14 @@ else:
 # --- RESULTS ---
 st.divider()
 c1, c2, c3 = st.columns(3)
-c1.metric("Stage 1 Gain", f"{av1:.2f} V/V
+
+# This was the line with the syntax error. It is now fixed.
+c1.metric("Stage 1 Gain", f"{av1:.2f} V/V")
+
+if enable_stage_2:
+    c2.metric("Stage 2 Gain", f"{av2:.2f} V/V")
+    c3.metric("Total Gain", f"{total_gain:.2f} V/V")
+else:
+    c2.metric("Total Gain", f"{av1:.2f} V/V")
+
+st.info("Formulas used: $A_v \\approx -R_D / (1/g_m + R_S)$. Assumes $g_m$ constant for demo.")
