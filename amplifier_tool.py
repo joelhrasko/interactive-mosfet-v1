@@ -9,7 +9,12 @@ st.title("Interactive CMOS Amplifier Designer (Multi-Stage)")
 
 # --- 2. SIDEBAR PARAMETERS ---
 st.sidebar.header("Global Settings")
-zoom = st.sidebar.slider("Schematic Scale (Zoom)", 1.0, 5.0, 2.5, 0.25)
+# Slider 1: Controls the SIZE of the components (Zoom)
+zoom = st.sidebar.slider("Schematic Scale (Component Size)", 1.0, 5.0, 2.5, 0.25)
+
+# Slider 2: Controls the LENGTH of the wires (Spacing)
+# We default to 1.0. Lower values (e.g. 0.5) make the circuit tighter.
+wire_len = st.sidebar.slider("Wire Length (Spacing)", 0.2, 3.0, 1.0, 0.1)
 
 # --- HELPER: CALCULATE VALUES ---
 def calculate_network(name, default_val):
@@ -37,61 +42,61 @@ def calculate_network(name, default_val):
     return enable, r_eq, r_series, r_par, is_parallel
 
 # --- HELPER: ROBUST COMPONENT DRAWER ---
-def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right"):
+def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0):
     """
     Draws a wire, a single resistor, or a parallel pair.
-    CRITICAL: Keeps the main cursor strictly linear to avoid rotation bugs.
+    Uses 'spacing' to control the length of the wire if the resistor is disabled.
     """
     if not enable:
-        # Just draw a wire in the requested direction
-        if direction == "right": d.add(elm.Line().right())
-        elif direction == "up": d.add(elm.Line().up())
-        elif direction == "down": d.add(elm.Line().down())
+        # Just draw a wire in the requested direction, using the slider value
+        if direction == "right": d.add(elm.Line().right().length(spacing))
+        elif direction == "up": d.add(elm.Line().up().length(spacing))
+        elif direction == "down": d.add(elm.Line().down().length(spacing))
         return
 
     # Draw the "Main" path component (Series Resistor)
     lbl_s = f'$R_{{{label}}}$\n{r_s:.0f}Ω'
     
-    # We use 'd.here' to track where we started for the parallel branch
     start_point = d.here
     
-    # DRAW MAIN BRANCH (Moves the cursor forward)
+    # DRAW MAIN BRANCH
+    # We use the standard resistor length (usually 3 units) regardless of wire spacing
+    # to ensure the component doesn't look squashed.
     if direction == "right":
-        main_r = d.add(elm.Resistor().right().label(lbl_s))
+        d.add(elm.Resistor().right().label(lbl_s))
     elif direction == "up":
-        main_r = d.add(elm.Resistor().up().label(lbl_s))
+        d.add(elm.Resistor().up().label(lbl_s))
     elif direction == "down":
-        main_r = d.add(elm.Resistor().down().label(lbl_s))
+        d.add(elm.Resistor().down().label(lbl_s))
         
-    end_point = d.here # This is where we want to end up eventually
+    end_point = d.here 
     
     # DRAW PARALLEL BRANCH (If enabled)
-    # We use push/pop so this drawing logic NEVER affects the final cursor position/rotation
     if is_parallel:
-        d.push() # Save cursor at 'end_point'
+        d.push() # Save cursor
         
-        # Go back to start to draw the second branch
         d.here = start_point 
-        
         lbl_p = f'{r_p:.0f}Ω'
         
-        # Offset logic depends on direction
+        # We use a fixed offset for the parallel branch width (1.5) so it doesn't overlap labels
+        width_offset = 1.5
+        
         if direction == "right":
-            d.add(elm.Line().up(1.0)) # Go up
-            d.add(elm.Resistor().right().length(3).label(lbl_p)) # Draw R same length as main
-            d.add(elm.Line().down(1.0).to(end_point)) # Connect back to end
+            d.add(elm.Line().up(width_offset)) 
+            d.add(elm.Resistor().right().label(lbl_p)) 
+            d.add(elm.Line().down(width_offset).to(end_point))
         
         elif direction == "up":
-            d.add(elm.Line().left(1.0)) 
-            d.add(elm.Resistor().up().length(3).label(lbl_p))
-            d.add(elm.Line().right(1.0).to(end_point))
+            d.add(elm.Line().left(width_offset)) 
+            d.add(elm.Resistor().up().label(lbl_p))
+            d.add(elm.Line().right(width_offset).to(end_point))
             
         elif direction == "down":
-            d.add(elm.Line().left(1.0))
-            d.add(elm.Resistor().down().length(3).label(lbl_p))
-            d.add(elm.Line().right(1.0).to(end_point))
+            d.add(elm.Line().left(width_offset))
+            d.add(elm.Resistor().down().label(lbl_p))
+            d.add(elm.Line().right(width_offset).to(end_point))
             
-        d.pop() # Restore cursor to 'end_point' so the next component attaches correctly
+        d.pop() # Restore cursor
 
 # --- STAGE 1 INPUTS ---
 st.sidebar.divider()
@@ -151,20 +156,21 @@ d.add(elm.SourceSin().up().label('$V_{in}$'))
 # 1. Gate Network (Draws Rightwards)
 d.add(elm.Dot())
 d.push() # Save "Input Node"
-draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G1", direction="right")
+# Pass wire_len to the helper
+draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G1", direction="right", spacing=wire_len)
 
 # Gate Divider (Parallel to Ground)
 if s1_add_gate_div:
-    d.push() # Save position at Gate
+    d.push()
     d.add(elm.Resistor().down().label(f'$R_{{div}}$\n{s1_rg_div:.0f}Ω'))
     d.add(elm.Ground())
     d.pop()
 
-# 2. MOSFET M1 (Standard Orientation: Gate Left, Drain Top, Source Bottom)
-# We anchor to the Gate to ensure precise connection
-Q1 = d.add(elm.NFet().anchor('gate').label('$M_1$'))
+# 2. MOSFET M1 (FLIPPED to get Gate on Left)
+# IMPORTANT: We use flip=True because the default symbol has the gate on the Right.
+# anchor('gate') attaches the Gate (Left side) to the previous resistor.
+Q1 = d.add(elm.NFet(flip=True).anchor('gate').label('$M_1$'))
 
-# Labels (Gate on Left, so label goes Left)
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
@@ -172,17 +178,17 @@ d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
 # 3. Source Network (Draws Downwards from Source)
 d.push()
 d.move_from(Q1.source, dx=0, dy=0)
-draw_resistor_network(d, s1_rs_en, s1_rs_is_par, s1_rs_s, s1_rs_p, "S1", direction="down")
+draw_resistor_network(d, s1_rs_en, s1_rs_is_par, s1_rs_s, s1_rs_p, "S1", direction="down", spacing=wire_len)
 d.add(elm.Ground())
 d.pop()
 
 # 4. Drain Network (Draws Upwards from Drain)
 d.move_from(Q1.drain, dx=0, dy=0)
-draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D1", direction="up")
+draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D1", direction="up", spacing=wire_len)
 d.add(elm.Vdd().label('$V_{DD}$'))
 
-# Probe Vout1 (Draws to the Right from Drain)
-d.add(elm.Line().right().at(Q1.drain).length(1))
+# Probe Vout1 (Uses wire_len for the probe arm length)
+d.add(elm.Line().right().at(Q1.drain).length(wire_len))
 d.add(elm.Dot(open=True))
 d.add(elm.Label().label('$V_{out1}$', loc='right'))
 vout1_node = d.here 
@@ -191,7 +197,7 @@ vout1_node = d.here
 if enable_stage_2:
     d.move_from(vout1_node, dx=0, dy=0)
     
-    # Interstage Coupling (Drawing Rightwards)
+    # Interstage Coupling
     if interstage_type == "Resistor":
         d.add(elm.Resistor().right().label('R_{c}'))
     elif interstage_type == "Capacitor":
@@ -200,7 +206,8 @@ if enable_stage_2:
         d.add(elm.Resistor().right())
         d.add(elm.Capacitor().right())
     else: 
-        d.add(elm.Line().right())
+        # Use wire_len slider for the wire connection
+        d.add(elm.Line().right().length(wire_len))
         
     # Stage 2 Gate Bias
     if s2_rg_total > 0:
@@ -209,8 +216,8 @@ if enable_stage_2:
         d.add(elm.Ground())
         d.pop()
         
-    # MOSFET M2 (Standard)
-    Q2 = d.add(elm.NFet().anchor('gate').label('$M_2$'))
+    # MOSFET M2 (Flipped)
+    Q2 = d.add(elm.NFet(flip=True).anchor('gate').label('$M_2$'))
     
     d.add(elm.Label().at(Q2.gate).label('G', loc='left', color='blue'))
     d.add(elm.Label().at(Q2.drain).label('D', loc='top', color='blue'))
@@ -219,17 +226,17 @@ if enable_stage_2:
     # Stage 2 Source
     d.push()
     d.move_from(Q2.source, dx=0, dy=0)
-    draw_resistor_network(d, s2_rs_en, s2_rs_is_par, s2_rs_s, s2_rs_p, "S2", direction="down")
+    draw_resistor_network(d, s2_rs_en, s2_rs_is_par, s2_rs_s, s2_rs_p, "S2", direction="down", spacing=wire_len)
     d.add(elm.Ground())
     d.pop()
     
     # Stage 2 Drain
     d.move_from(Q2.drain, dx=0, dy=0)
-    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D2", direction="up")
+    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D2", direction="up", spacing=wire_len)
     d.add(elm.Vdd().label('$V_{DD}$'))
     
     # Probe Vout2
-    d.add(elm.Line().right().at(Q2.drain).length(1))
+    d.add(elm.Line().right().at(Q2.drain).length(wire_len))
     d.add(elm.Dot(open=True))
     d.add(elm.Label().label('$V_{out2}$', loc='right'))
 
@@ -237,7 +244,6 @@ if enable_stage_2:
 schem_fig = d.draw()
 
 if schem_fig.fig:
-    # Tight layout to remove excess whitespace
     schem_fig.fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
     st.pyplot(schem_fig.fig)
 else:
