@@ -116,7 +116,7 @@ if s1_add_gate_div:
 # We anchor the Gate to the current position
 Q1 = d.add(elm.NFet().anchor('gate').label('$M_1$'))
 
-# Add Labels for D, G, S (Using correct .label syntax)
+# Labels for D, G, S
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
@@ -142,7 +142,10 @@ d.add(elm.Vdd().label('$V_{DD}$'))
 # 7. Probe Vout1
 d.add(elm.Line().right().at(Q1.drain).length(1))
 d.add(elm.Dot(open=True))
-d.add(elm.Label().label('$V_{out1}$').loc('right'))
+
+# *** FIX IS HERE: loc='right' is now inside the label() function ***
+d.add(elm.Label().label('$V_{out1}$', loc='right'))
+
 vout1_node = d.here # Save this spot to connect Stage 2
 
 # --- DRAW STAGE 2 (If Enabled) ---
@@ -171,7 +174,7 @@ if enable_stage_2:
     # MOSFET M2
     Q2 = d.add(elm.NFet().anchor('gate').label('$M_2$'))
     
-    # M2 Labels (Using correct .label syntax)
+    # M2 Labels
     d.add(elm.Label().at(Q2.gate).label('G', loc='left', color='blue'))
     d.add(elm.Label().at(Q2.drain).label('D', loc='top', color='blue'))
     d.add(elm.Label().at(Q2.source).label('S', loc='bottom', color='blue'))
@@ -197,7 +200,9 @@ if enable_stage_2:
     # Probe Vout2
     d.add(elm.Line().right().at(Q2.drain).length(1))
     d.add(elm.Dot(open=True))
-    d.add(elm.Label().label('$V_{out2}$').loc('right'))
+    
+    # *** FIX IS HERE: loc='right' is now inside the label() function ***
+    d.add(elm.Label().label('$V_{out2}$', loc='right'))
 
 # --- RENDER ---
 schem_fig = d.draw()
@@ -216,7 +221,7 @@ else:
 st.divider()
 c1, c2, c3 = st.columns(3)
 
-# This was the line with the syntax error. It is now fixed.
+# Metrics display
 c1.metric("Stage 1 Gain", f"{av1:.2f} V/V")
 
 if enable_stage_2:
