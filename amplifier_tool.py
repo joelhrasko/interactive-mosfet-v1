@@ -9,16 +9,14 @@ st.title("Interactive CMOS Amplifier Designer (Multi-Stage)")
 
 # --- 2. SIDEBAR PARAMETERS ---
 st.sidebar.header("Global Settings")
-# Slider 1: Controls the SIZE of the components (Zoom)
 zoom = st.sidebar.slider("Schematic Scale (Component Size)", 1.0, 5.0, 2.5, 0.25)
-
-# Slider 2: Controls the LENGTH of the wires (Spacing)
-# We default to 1.0. Lower values (e.g. 0.5) make the circuit tighter.
 wire_len = st.sidebar.slider("Wire Length (Spacing)", 0.2, 3.0, 1.0, 0.1)
+
+# *** THE FIX: Manual Toggle for MOSFET Orientation ***
+force_flip = st.sidebar.checkbox("Flip MOSFET Orientation (Gate Right?)", value=False)
 
 # --- HELPER: CALCULATE VALUES ---
 def calculate_network(name, default_val):
-    """Creates sidebar UI for a resistor network and calculates equivalent R."""
     st.sidebar.markdown(f"**{name} Network**")
     enable = st.sidebar.checkbox(f"Enable {name}", value=True, key=f"{name}_en")
     
@@ -30,73 +28,54 @@ def calculate_network(name, default_val):
     if enable:
         r_series = st.sidebar.number_input(f"{name} Series (Ω)", value=default_val, step=100.0, key=f"{name}_s")
         r_eq = r_series
-        
         is_parallel = st.sidebar.checkbox(f"Add Parallel to {name}", key=f"{name}_pen")
         if is_parallel:
             r_par = st.sidebar.number_input(f"{name} Parallel (Ω)", value=default_val, step=100.0, key=f"{name}_p")
             if (r_series + r_par) > 0:
                 r_eq = (r_series * r_par) / (r_series + r_par)
-        
         st.sidebar.caption(f"Total {name} Resistance: {r_eq:.1f} Ω")
         
     return enable, r_eq, r_series, r_par, is_parallel
 
-# --- HELPER: ROBUST COMPONENT DRAWER ---
+# --- HELPER: DRAWER ---
 def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0):
-    """
-    Draws a wire, a single resistor, or a parallel pair.
-    Uses 'spacing' to control the length of the wire if the resistor is disabled.
-    """
     if not enable:
-        # Just draw a wire in the requested direction, using the slider value
+        # Draw a wire if disabled
         if direction == "right": d.add(elm.Line().right().length(spacing))
         elif direction == "up": d.add(elm.Line().up().length(spacing))
         elif direction == "down": d.add(elm.Line().down().length(spacing))
         return
 
-    # Draw the "Main" path component (Series Resistor)
     lbl_s = f'$R_{{{label}}}$\n{r_s:.0f}Ω'
-    
     start_point = d.here
     
-    # DRAW MAIN BRANCH
-    # We use the standard resistor length (usually 3 units) regardless of wire spacing
-    # to ensure the component doesn't look squashed.
-    if direction == "right":
-        d.add(elm.Resistor().right().label(lbl_s))
-    elif direction == "up":
-        d.add(elm.Resistor().up().label(lbl_s))
-    elif direction == "down":
-        d.add(elm.Resistor().down().label(lbl_s))
+    # Draw Main Resistor
+    if direction == "right": d.add(elm.Resistor().right().label(lbl_s))
+    elif direction == "up": d.add(elm.Resistor().up().label(lbl_s))
+    elif direction == "down": d.add(elm.Resistor().down().label(lbl_s))
         
     end_point = d.here 
     
-    # DRAW PARALLEL BRANCH (If enabled)
+    # Draw Parallel Branch (using push/pop to avoid rotation)
     if is_parallel:
-        d.push() # Save cursor
-        
+        d.push()
         d.here = start_point 
         lbl_p = f'{r_p:.0f}Ω'
-        
-        # We use a fixed offset for the parallel branch width (1.5) so it doesn't overlap labels
-        width_offset = 1.5
+        width_offset = 1.2
         
         if direction == "right":
             d.add(elm.Line().up(width_offset)) 
             d.add(elm.Resistor().right().label(lbl_p)) 
             d.add(elm.Line().down(width_offset).to(end_point))
-        
         elif direction == "up":
             d.add(elm.Line().left(width_offset)) 
             d.add(elm.Resistor().up().label(lbl_p))
             d.add(elm.Line().right(width_offset).to(end_point))
-            
         elif direction == "down":
             d.add(elm.Line().left(width_offset))
             d.add(elm.Resistor().down().label(lbl_p))
             d.add(elm.Line().right(width_offset).to(end_point))
-            
-        d.pop() # Restore cursor
+        d.pop()
 
 # --- STAGE 1 INPUTS ---
 st.sidebar.divider()
@@ -105,7 +84,7 @@ s1_rg_en, s1_rg_total, s1_rg_s, s1_rg_p, s1_rg_is_par = calculate_network("Stage
 s1_rd_en, s1_rd_total, s1_rd_s, s1_rd_p, s1_rd_is_par = calculate_network("Stage 1 Drain", 5000.0)
 s1_rs_en, s1_rs_total, s1_rs_s, s1_rs_p, s1_rs_is_par = calculate_network("Stage 1 Source", 1000.0)
 
-s1_add_gate_div = st.sidebar.checkbox("Add Stage 1 Gate Divider (Parallel to GND)")
+s1_add_gate_div = st.sidebar.checkbox("Add Stage 1 Gate Divider")
 s1_rg_div = 0
 if s1_add_gate_div:
     s1_rg_div = st.sidebar.number_input("Stage 1 Gate Divider (Ω)", value=20000.0, step=1000.0)
@@ -120,16 +99,14 @@ interstage_type = "None"
 if enable_stage_2:
     st.sidebar.header("Interstage Coupling")
     interstage_type = st.sidebar.selectbox("Coupling Type", ["Direct Wire", "Resistor", "Capacitor", "Series R+C"])
-    
     st.sidebar.header("Stage 2 Parameters")
     s2_add_bias = st.sidebar.checkbox("Add Stage 2 Gate Bias Resistor", value=True)
     if s2_add_bias:
         s2_rg_total = st.sidebar.number_input("Stage 2 Gate Bias (Ω)", value=10000.0, step=100.0)
-    
     s2_rd_en, s2_rd_total, s2_rd_s, s2_rd_p, s2_rd_is_par = calculate_network("Stage 2 Drain", 5000.0)
     s2_rs_en, s2_rs_total, s2_rs_s, s2_rs_p, s2_rs_is_par = calculate_network("Stage 2 Source", 500.0)
 
-# --- 3. MATH ENGINE ---
+# --- MATH ENGINE ---
 gm = 0.005 
 av1 = 0
 if s1_rd_total > 0:
@@ -143,72 +120,82 @@ if enable_stage_2 and s2_rd_total > 0:
 
 total_gain = av1 * (av2 if enable_stage_2 else 1)
 
-# --- 4. DRAWING ENGINE ---
+# --- DRAWING ENGINE ---
 st.subheader("Circuit Schematic")
-
 d = schemdraw.Drawing()
 d.config(unit=zoom, fontsize=12)
 
-# --- STAGE 1 DRAWING ---
+# --- DRAW STAGE 1 ---
+# 1. Start with GROUND
 d.add(elm.Ground())
+
+# 2. Input Source (Up from Ground)
 d.add(elm.SourceSin().up().label('$V_{in}$'))
 
-# 1. Gate Network (Draws Rightwards)
+# 3. Gate Network (Right from Input)
 d.add(elm.Dot())
-d.push() # Save "Input Node"
-# Pass wire_len to the helper
+d.push()
 draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G1", direction="right", spacing=wire_len)
 
-# Gate Divider (Parallel to Ground)
+# Optional Gate Divider (Down to Ground)
 if s1_add_gate_div:
     d.push()
     d.add(elm.Resistor().down().label(f'$R_{{div}}$\n{s1_rg_div:.0f}Ω'))
     d.add(elm.Ground())
     d.pop()
 
-# 2. MOSFET M1 (FLIPPED to get Gate on Left)
-# IMPORTANT: We use flip=True because the default symbol has the gate on the Right.
-# anchor('gate') attaches the Gate (Left side) to the previous resistor.
-Q1 = d.add(elm.PFet(flip=False).anchor('gate').label('$M_1$'))
+# 4. MOSFET M1 (The Anchor)
+# flip=force_flip allows you to toggle direction manually in the sidebar
+Q1 = d.add(elm.NFet(flip=force_flip).anchor('gate').label('$M_1$'))
 
-d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
+# Labels (Adjust based on flip)
+d.add(elm.Label().at(Q1.gate).label('G', loc='left' if not force_flip else 'right', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
 
-# 3. Source Network (Draws Downwards from Source)
+# 5. Source Network (Down from M1 Source)
 d.push()
 d.move_from(Q1.source, dx=0, dy=0)
 draw_resistor_network(d, s1_rs_en, s1_rs_is_par, s1_rs_s, s1_rs_p, "S1", direction="down", spacing=wire_len)
 d.add(elm.Ground())
 d.pop()
 
-# 4. Drain Network (Draws Upwards from Drain)
+# 6. Drain Network (Up from M1 Drain)
 d.move_from(Q1.drain, dx=0, dy=0)
 draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D1", direction="up", spacing=wire_len)
 d.add(elm.Vdd().label('$V_{DD}$'))
 
-# Probe Vout1 (Uses wire_len for the probe arm length)
-d.add(elm.Line().right().at(Q1.drain).length(wire_len))
-d.add(elm.Dot(open=True))
-d.add(elm.Label().label('$V_{out1}$', loc='right'))
+# Probe Vout1
+# We determine direction based on flip. If not flipped (Gate Left), Probe goes Right.
+probe_dir = 'right' if not force_flip else 'left'
+if probe_dir == 'right':
+    d.add(elm.Line().right().at(Q1.drain).length(wire_len))
+    d.add(elm.Dot(open=True))
+    d.add(elm.Label().label('$V_{out1}$', loc='right'))
+else:
+    d.add(elm.Line().left().at(Q1.drain).length(wire_len))
+    d.add(elm.Dot(open=True))
+    d.add(elm.Label().label('$V_{out1}$', loc='left'))
+    
 vout1_node = d.here 
 
-# --- STAGE 2 DRAWING ---
+# --- DRAW STAGE 2 ---
 if enable_stage_2:
     d.move_from(vout1_node, dx=0, dy=0)
     
     # Interstage Coupling
-    if interstage_type == "Resistor":
-        d.add(elm.Resistor().right().label('R_{c}'))
-    elif interstage_type == "Capacitor":
-        d.add(elm.Capacitor().right().label('C_{c}'))
-    elif interstage_type == "Series R+C":
-        d.add(elm.Resistor().right())
-        d.add(elm.Capacitor().right())
-    else: 
-        # Use wire_len slider for the wire connection
-        d.add(elm.Line().right().length(wire_len))
-        
+    # If standard orientation, we draw right.
+    if probe_dir == 'right':
+        if interstage_type == "Resistor": d.add(elm.Resistor().right().label('R_{c}'))
+        elif interstage_type == "Capacitor": d.add(elm.Capacitor().right().label('C_{c}'))
+        elif interstage_type == "Series R+C": 
+            d.add(elm.Resistor().right())
+            d.add(elm.Capacitor().right())
+        else: d.add(elm.Line().right().length(wire_len))
+    else:
+        # If flipped, we draw left (unlikely but handled)
+        d.add(elm.Line().left().length(wire_len))
+
     # Stage 2 Gate Bias
     if s2_rg_total > 0:
         d.push()
@@ -216,13 +203,14 @@ if enable_stage_2:
         d.add(elm.Ground())
         d.pop()
         
-    # MOSFET M2 (Flipped)
-    Q2 = d.add(elm.NFet(flip=True).anchor('gate').label('$M_2$'))
+    # MOSFET M2
+    Q2 = d.add(elm.NFet(flip=force_flip).anchor('gate').label('$M_2$'))
     
-    d.add(elm.Label().at(Q2.gate).label('G', loc='left', color='blue'))
+    # M2 Labels
+    d.add(elm.Label().at(Q2.gate).label('G', loc='left' if not force_flip else 'right', color='blue'))
     d.add(elm.Label().at(Q2.drain).label('D', loc='top', color='blue'))
     d.add(elm.Label().at(Q2.source).label('S', loc='bottom', color='blue'))
-    
+
     # Stage 2 Source
     d.push()
     d.move_from(Q2.source, dx=0, dy=0)
@@ -236,9 +224,14 @@ if enable_stage_2:
     d.add(elm.Vdd().label('$V_{DD}$'))
     
     # Probe Vout2
-    d.add(elm.Line().right().at(Q2.drain).length(wire_len))
-    d.add(elm.Dot(open=True))
-    d.add(elm.Label().label('$V_{out2}$', loc='right'))
+    if probe_dir == 'right':
+        d.add(elm.Line().right().at(Q2.drain).length(wire_len))
+        d.add(elm.Dot(open=True))
+        d.add(elm.Label().label('$V_{out2}$', loc='right'))
+    else:
+        d.add(elm.Line().left().at(Q2.drain).length(wire_len))
+        d.add(elm.Dot(open=True))
+        d.add(elm.Label().label('$V_{out2}$', loc='left'))
 
 # --- RENDER ---
 schem_fig = d.draw()
@@ -254,11 +247,11 @@ st.divider()
 c1, c2, c3 = st.columns(3)
 
 c1.metric("Stage 1 Gain", f"{av1:.2f} V/V")
-st.caption(f"**Reference:** Rd1_Total={s1_rd_total:.0f}Ω | Rs1_Total={s1_rs_total:.0f}Ω")
+st.caption(f"**Ref:** Rd1_Tot={s1_rd_total:.0f}Ω | Rs1_Tot={s1_rs_total:.0f}Ω")
 
 if enable_stage_2:
     c2.metric("Stage 2 Gain", f"{av2:.2f} V/V")
     c3.metric("Total Gain", f"{total_gain:.2f} V/V")
-    st.caption(f"**Reference:** Rd2_Total={s2_rd_total:.0f}Ω | Rs2_Total={s2_rs_total:.0f}Ω")
+    st.caption(f"**Ref:** Rd2_Tot={s2_rd_total:.0f}Ω | Rs2_Tot={s2_rs_total:.0f}Ω")
 else:
     c2.metric("Total Gain", f"{av1:.2f} V/V")
