@@ -50,7 +50,6 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
         return
 
     # Draw the "Main" path component (Series Resistor)
-    # We define the label for the main path
     lbl_s = f'$R_{{{label}}}$\n{r_s:.0f}Ω'
     
     # We use 'd.here' to track where we started for the parallel branch
@@ -162,25 +161,27 @@ if s1_add_gate_div:
     d.pop()
 
 # 2. MOSFET M1 (Standard Orientation: Gate Left, Drain Top, Source Bottom)
+# We anchor to the Gate to ensure precise connection
 Q1 = d.add(elm.NFet().anchor('gate').label('$M_1$'))
 
+# Labels (Gate on Left, so label goes Left)
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='top', color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='bottom', color='blue'))
 
-# 3. Source Network (Draws Downwards)
+# 3. Source Network (Draws Downwards from Source)
 d.push()
 d.move_from(Q1.source, dx=0, dy=0)
 draw_resistor_network(d, s1_rs_en, s1_rs_is_par, s1_rs_s, s1_rs_p, "S1", direction="down")
 d.add(elm.Ground())
 d.pop()
 
-# 4. Drain Network (Draws Upwards)
+# 4. Drain Network (Draws Upwards from Drain)
 d.move_from(Q1.drain, dx=0, dy=0)
 draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D1", direction="up")
 d.add(elm.Vdd().label('$V_{DD}$'))
 
-# Probe Vout1
+# Probe Vout1 (Draws to the Right from Drain)
 d.add(elm.Line().right().at(Q1.drain).length(1))
 d.add(elm.Dot(open=True))
 d.add(elm.Label().label('$V_{out1}$', loc='right'))
@@ -236,6 +237,7 @@ if enable_stage_2:
 schem_fig = d.draw()
 
 if schem_fig.fig:
+    # Tight layout to remove excess whitespace
     schem_fig.fig.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95)
     st.pyplot(schem_fig.fig)
 else:
