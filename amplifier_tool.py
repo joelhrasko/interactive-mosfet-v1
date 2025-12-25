@@ -20,8 +20,9 @@ with col_g2:
 st.sidebar.markdown("**Canvas Dimensions (Shrink White Box)**")
 col_c1, col_c2 = st.sidebar.columns(2)
 with col_c1:
-    can_w = st.number_input("Width (in)", value=8.0, step=0.5)
+    can_w = st.number_input("Width (in)", value=10.0, step=0.5)
 with col_c2:
+    # Defaulting to a shorter height for that "Widescreen" look
     can_h = st.number_input("Height (in)", value=5.0, step=0.5)
 
 st.sidebar.divider()
@@ -53,9 +54,6 @@ def calculate_network(name, label_prefix, default_val):
 
 # --- HELPER: DRAWER ---
 def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0, par_dir="left"):
-    """
-    par_dir: Controls which side the parallel loop draws on ("left" or "right").
-    """
     if not enable:
         total_len = spacing + 3.0
         if direction == "right": d.add(elm.Line().right().length(total_len))
@@ -86,13 +84,10 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
         width_offset = 1.8 
         
         if direction == "right":
-            # For horizontal resistors, up/down is the parallel offset
             d.add(elm.Line().up(width_offset)) 
             d.add(elm.Resistor().right().label(lbl_p)) 
             d.add(elm.Line().down(width_offset).to(end_point))
-            
         elif direction == "up":
-            # For vertical resistors (Drain), we can choose Left or Right side
             if par_dir == "right":
                 d.add(elm.Line().right(width_offset)) 
                 d.add(elm.Resistor().up().label(lbl_p))
@@ -101,7 +96,6 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
                 d.add(elm.Line().left(width_offset)) 
                 d.add(elm.Resistor().up().label(lbl_p))
                 d.add(elm.Line().right(width_offset).to(end_point))
-                
         elif direction == "down":
             d.add(elm.Line().left(width_offset))
             d.add(elm.Resistor().down().label(lbl_p))
@@ -168,7 +162,7 @@ d.add(elm.Dot())
 d.push()
 draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G", direction="right", spacing=wire_len)
 
-# Gate Divider (Conditional Spacing)
+# Gate Divider
 if s1_add_gate_div:
     d.push()
     d.add(elm.Line().right(0.5)) 
@@ -176,15 +170,18 @@ if s1_add_gate_div:
     d.add(elm.Line().down().length(wire_len))
     d.add(elm.Ground())
     d.pop()
-    
-    # *** FIX: Extra spacing ONLY when Divider is ON ***
+    # Extra spacing ONLY if divider is on
     d.add(elm.Line().right().length(1.0))
 
 # MOSFET M1
-Q1 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_1$', ofst=(1.5, -1.0)))
+Q1 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_1$', ofst=(1.2, -0.8)))
 
-d.add(elm.Label().at(Q1.gate).label('G', loc='left', ofst=(-0.2, -0.6), color='blue'))
-d.add(elm.Label().at(Q1.drain).label('D', loc='bottom', ofst=(0.5, 0.5), color='blue'))
+# LABELS (Nudged as requested)
+# G: Moved Down (y = -0.8)
+# D: Moved Up (y = 0.8)
+# S: Moved Down to match S position (standard labels are tricky on flipped)
+d.add(elm.Label().at(Q1.gate).label('G', loc='left', ofst=(-0.2, -0.8), color='blue'))
+d.add(elm.Label().at(Q1.drain).label('D', loc='bottom', ofst=(0.5, 0.8), color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='top', ofst=(0.5, 0), color='blue'))
 
 # Source Network
@@ -196,7 +193,7 @@ d.add(elm.Line().down().length(wire_len))
 d.add(elm.Ground())
 d.pop()
 
-# Drain Network (FIX: par_dir="right" pushes parallel R to the right)
+# Drain Network (Parallel to RIGHT)
 d.move_from(Q1.drain, dx=0, dy=0)
 d.add(elm.Line().up().length(wire_len)) 
 draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D", direction="up", spacing=0, par_dir="right")
@@ -239,10 +236,10 @@ if enable_stage_2:
         d.pop()
         
     # MOSFET M2
-    Q2 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_2$', ofst=(1.5, -1.0)))
+    Q2 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_2$', ofst=(1.2, -0.8)))
     
-    d.add(elm.Label().at(Q2.gate).label('G', loc='left', ofst=(-0.2, -0.6), color='blue'))
-    d.add(elm.Label().at(Q2.drain).label('D', loc='bottom', ofst=(0.5, 0.5), color='blue'))
+    d.add(elm.Label().at(Q2.gate).label('G', loc='left', ofst=(-0.2, -0.8), color='blue'))
+    d.add(elm.Label().at(Q2.drain).label('D', loc='bottom', ofst=(0.5, 0.8), color='blue'))
     d.add(elm.Label().at(Q2.source).label('S', loc='top', ofst=(0.5, 0), color='blue'))
 
     # Stage 2 Source
@@ -254,10 +251,10 @@ if enable_stage_2:
     d.add(elm.Ground())
     d.pop()
     
-    # Stage 2 Drain (Left parallel is fine here as it's far from gate)
+    # Stage 2 Drain
     d.move_from(Q2.drain, dx=0, dy=0)
     d.add(elm.Line().up().length(wire_len)) 
-    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D", direction="up", spacing=0, par_dir="left")
+    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D", direction="up", spacing=0)
     d.add(elm.Line().up().length(wire_len)) 
     d.add(elm.Vdd().label('$V_{DD}$'))
     
@@ -270,14 +267,18 @@ if enable_stage_2:
 schem_fig = d.draw()
 
 if schem_fig.fig:
-    # Use USER DEFINED Canvas Size
+    # Set Canvas Size
     schem_fig.fig.set_size_inches(can_w, can_h) 
     
-    # FIX: use_container_width=False forces the image to respect the dimensions above
-    # instead of stretching to fill the page width.
-    st.pyplot(schem_fig.fig, use_container_width=False)
+    # *** CRITICAL FIX: Prevent Distortion ***
+    # This forces circles to stay circular even if the box is wide
+    ax = schem_fig.fig.gca()
+    ax.set_aspect('equal')
+    
+    # Fix Warning: use 'content' instead of True/False
+    st.pyplot(schem_fig.fig, width="content")
 else:
-    st.pyplot(schem_fig, use_container_width=False)
+    st.pyplot(schem_fig)
 
 # --- RESULTS ---
 st.divider()
