@@ -3,18 +3,37 @@ import schemdraw
 import schemdraw.elements as elm
 import matplotlib.pyplot as plt
 
-# --- 1. PAGE SETUP -----------------------------------------------------------------
+# --- 1. PAGE SETUP ---
 st.set_page_config(page_title="CMOS Amplifier Designer", layout="wide")
 st.title("Interactive CMOS Amplifier Designer (Multi-Stage)")
 
-# --- 2. SIDEBAR PARAMETERS ---------------------------------------------------------------
+# --- 2. SIDEBAR PARAMETERS ---
 st.sidebar.header("Global Settings")
-zoom = st.sidebar.slider("Schematic Scale", 1.0, 5.0, 3.0, 0.25)
-font_size = st.sidebar.slider("Text Size", 8, 24, 14, 1)
-# Lowered minimum to 0.1 for tighter packing
-wire_len = st.sidebar.slider("Wire Spacing (Grounds/Nodes)", 0.1, 3.0, 1.0, 0.1)
 
-# --- HELPER: CALCULATE VALUES ---------------------------------------------------------------
+# PRESET DEFAULTS (Number Inputs with +/- buttons)
+# Columns for tighter UI
+col_g1, col_g2 = st.sidebar.columns(2)
+with col_g1:
+    zoom = st.number_input("Schematic Scale", value=1.75, step=0.25)
+    wire_len = st.number_input("Wire Spacing", value=0.2, step=0.1)
+with col_g2:
+    font_size = st.number_input("Text Size", value=8, step=1)
+    
+st.sidebar.markdown("**Canvas Dimensions**")
+col_c1, col_c2 = st.sidebar.columns(2)
+with col_c1:
+    can_w = st.number_input("Width (in)", value=10.0, step=0.5)
+with col_c2:
+    can_h = st.number_input("Height (in)", value=6.0, step=0.5)
+
+st.sidebar.divider()
+st.sidebar.header("MOSFET Fixes")
+# Forced defaults as requested
+mosfet_theta = 180 
+mosfet_mirror = True 
+st.sidebar.caption(f"Locked: Rotate {mosfet_theta}°, Mirror=True")
+
+# --- HELPER: CALCULATE VALUES ---
 def calculate_network(name, label_prefix, default_val):
     st.sidebar.markdown(f"**{name} Network**")
     enable = st.sidebar.checkbox(f"Enable {name}", value=True, key=f"{name}_en")
@@ -35,22 +54,21 @@ def calculate_network(name, label_prefix, default_val):
         
     return enable, r_eq, r_series, r_par, is_parallel
 
-# --- HELPER: DRAWER ---------------------------------------------------------------------------------------------------------------------------
+# --- HELPER: DRAWER ---
 def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0):
     if not enable:
-        # Draw a wire if disabled (Short) + Spacing
-        total_len = spacing + 2.0
+        total_len = spacing + 3.0
         if direction == "right": d.add(elm.Line().right().length(total_len))
         elif direction == "up": d.add(elm.Line().up().length(total_len))
         elif direction == "down": d.add(elm.Line().down().length(total_len))
         return
 
-    # 1. Draw Lead-in Wire (Spacing)
+    # 1. Spacing Wire
     if direction == "right": d.add(elm.Line().right().length(spacing))
     elif direction == "up": d.add(elm.Line().up().length(spacing))
     elif direction == "down": d.add(elm.Line().down().length(spacing))
 
-    # 2. Draw Main Resistor
+    # 2. Main Resistor
     lbl_s = f'$R_{{{label}1}}$\n{r_s:.0f}Ω'
     start_point = d.here
     
@@ -60,12 +78,11 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
         
     end_point = d.here 
     
-    # 3. Draw Parallel Branch
+    # 3. Parallel Branch
     if is_parallel:
         d.push()
         d.here = start_point 
         lbl_p = f'$R_{{{label}2}}$\n{r_p:.0f}Ω'
-        # Reduced offset to 1.8 to prevent overlap
         width_offset = 1.8 
         
         if direction == "right":
@@ -82,7 +99,7 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
             d.add(elm.Line().right(width_offset).to(end_point))
         d.pop()
 
-# --- STAGE 1 INPUTS ---------------------------------------------------------------------------------------------------------------------------
+# --- STAGE 1 INPUTS ---
 st.sidebar.divider()
 st.sidebar.header("Stage 1 Parameters")
 s1_rg_en, s1_rg_total, s1_rg_s, s1_rg_p, s1_rg_is_par = calculate_network("Stage 1 Gate", "G", 10000.0)
@@ -96,12 +113,12 @@ s1_rd_en, s1_rd_total, s1_rd_s, s1_rd_p, s1_rd_is_par = calculate_network("Stage
 s1_rs_en, s1_rs_total, s1_rs_s, s1_rs_p, s1_rs_is_par = calculate_network("Stage 1 Source", "S", 1000.0)
 
 
-# --- STAGE 2 INPUTS ---------------------------------------------------------------------------------------------------------------------------
+# --- STAGE 2 INPUTS ---
 st.sidebar.divider()
 enable_stage_2 = st.sidebar.checkbox("Enable Stage 2 (Cascade)", value=False)
 
 s2_rg_total = 0; s2_rd_total = 0; s2_rs_total = 0 
-interstage_type = "None"
+interstage_type = "Direct Wire"
 
 if enable_stage_2:
     st.sidebar.header("Interstage Coupling")
@@ -113,7 +130,7 @@ if enable_stage_2:
     s2_rd_en, s2_rd_total, s2_rd_s, s2_rd_p, s2_rd_is_par = calculate_network("Stage 2 Drain", "D", 5000.0)
     s2_rs_en, s2_rs_total, s2_rs_s, s2_rs_p, s2_rs_is_par = calculate_network("Stage 2 Source", "S", 500.0)
 
-# --- MATH ENGINE ---------------------------------------------------------------------------------------------------------------------------
+# --- MATH ENGINE ---
 gm = 0.005 
 av1 = 0
 if s1_rd_total > 0:
@@ -127,20 +144,17 @@ if enable_stage_2 and s2_rd_total > 0:
 
 total_gain = av1 * (av2 if enable_stage_2 else 1)
 
-# --- DRAWING ENGINE -------------------------------------------------------------
+# --- DRAWING ENGINE ---
 st.subheader("Circuit Schematic")
 d = schemdraw.Drawing()
 d.config(unit=zoom, fontsize=font_size)
 
-# --- DRAW STAGE 1 ---------------------------------------------------------------
-# 1. Ground
+# --- DRAW STAGE 1 ---
 d.add(elm.Ground())
-
-# 2. Input Source
 d.add(elm.SourceSin().up().label('$V_{in}$'))
-d.add(elm.Line().up().length(wire_len))
+d.add(elm.Line().up().length(wire_len)) 
 
-# 3. Gate Network
+# Gate Network
 d.add(elm.Dot())
 d.push()
 draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G", direction="right", spacing=wire_len)
@@ -154,18 +168,19 @@ if s1_add_gate_div:
     d.add(elm.Ground())
     d.pop()
 
-# 4. MOSFET M1 (LOCKED: 180 + Flip)
-# Adjusted M1 Label Offset: (1.5, -1.0) moves it down and right
+# EXTRA SPACING BEFORE MOSFET (Requested by User)
+d.add(elm.Line().right().length(1.0))
+
+# MOSFET M1
+# <--- CHANGE M1 LABEL OFFSET HERE: ofst=(x, y)
 Q1 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_1$', ofst=(1.5, -1.0)))
 
-# Tweaked Pin Labels
-# G: Moved down slightly (ofst=(0, -0.5))
-# D: Moved up slightly (ofst=(0, 0.5))
+# <--- CHANGE G/D/S LABEL OFFSETS HERE: ofst=(x, y)
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', ofst=(-0.2, -0.6), color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='bottom', ofst=(0.5, 0.5), color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='top', ofst=(0.5, 0), color='blue'))
 
-# 5. Source Network
+# Source Network
 d.push()
 d.move_from(Q1.source, dx=0, dy=0)
 d.add(elm.Line().down().length(wire_len))
@@ -174,7 +189,7 @@ d.add(elm.Line().down().length(wire_len))
 d.add(elm.Ground())
 d.pop()
 
-# 6. Drain Network
+# Drain Network
 d.move_from(Q1.drain, dx=0, dy=0)
 d.add(elm.Line().up().length(wire_len)) 
 draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D", direction="up", spacing=0)
@@ -188,14 +203,15 @@ d.add(elm.Label().label('$V_{out1}$', loc='top'))
     
 vout1_node = d.here 
 
-# --- DRAW STAGE 2 ---------------------------------------------------------------------------------------------------------------------------
+# --- DRAW STAGE 2 ---
 if enable_stage_2:
     d.move_from(vout1_node, dx=0, dy=0)
     
-    # Interstage Coupling
-    coupling_total_width = 6.0
-    
-    if interstage_type == "Resistor":
+    # Interstage Coupling - DYNAMIC WIDTH
+    if interstage_type == "Direct Wire":
+        # Compact mode for wire
+        d.add(elm.Line().right().length(3.0)) 
+    elif interstage_type == "Resistor":
         d.add(elm.Line().right().length(1.5))
         d.add(elm.Resistor().right().length(3.0).label(r'$R_c$'))
         d.add(elm.Line().right().length(1.5))
@@ -206,8 +222,6 @@ if enable_stage_2:
     elif interstage_type == "Series R+C": 
         d.add(elm.Resistor().right().length(3.0).label(r'$R_c$'))
         d.add(elm.Capacitor().right().length(3.0).label(r'$C_c$'))
-    else: 
-        d.add(elm.Line().right().length(coupling_total_width))
 
     # Stage 2 Gate Bias
     if s2_rg_total > 0:
@@ -246,20 +260,18 @@ if enable_stage_2:
     d.add(elm.Dot(open=True))
     d.add(elm.Label().label('$V_{out2}$', loc='top'))
 
-# --- RENDER ---------------------------------------------------------------------------------------------------------------------------
+# --- RENDER ---
 schem_fig = d.draw()
 
 if schem_fig.fig:
-    # WIDESCREEN RATIO FIX
-    # We use a smaller height multiplier (1.8 instead of 2.5) to keep it "Short and Wide"
-    schem_fig.fig.set_size_inches(zoom * 4.0, zoom * 1.8) 
-    # Tight layout removes margins
+    # Use USER DEFINED Canvas Size
+    schem_fig.fig.set_size_inches(can_w, can_h) 
     schem_fig.fig.subplots_adjust(left=0.02, bottom=0.02, right=0.98, top=0.98)
     st.pyplot(schem_fig.fig)
 else:
     st.pyplot(schem_fig)
 
-# --- RESULTS ---------------------------------------------------------------------------------------------------------------------------
+# --- RESULTS ---
 st.divider()
 
 g1, g2, g3 = st.columns(3)
