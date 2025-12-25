@@ -3,18 +3,18 @@ import schemdraw
 import schemdraw.elements as elm
 import matplotlib.pyplot as plt
 
-# --- 1. PAGE SETUP ---
+# --- 1. PAGE SETUP -----------------------------------------------------------------
 st.set_page_config(page_title="CMOS Amplifier Designer", layout="wide")
 st.title("Interactive CMOS Amplifier Designer (Multi-Stage)")
 
-# --- 2. SIDEBAR PARAMETERS ---
+# --- 2. SIDEBAR PARAMETERS ---------------------------------------------------------------
 st.sidebar.header("Global Settings")
 zoom = st.sidebar.slider("Schematic Scale", 1.0, 5.0, 3.0, 0.25)
 font_size = st.sidebar.slider("Text Size", 8, 24, 14, 1)
 # Lowered minimum to 0.1 for tighter packing
 wire_len = st.sidebar.slider("Wire Spacing (Grounds/Nodes)", 0.1, 3.0, 1.0, 0.1)
 
-# --- HELPER: CALCULATE VALUES ---
+# --- HELPER: CALCULATE VALUES ---------------------------------------------------------------
 def calculate_network(name, label_prefix, default_val):
     st.sidebar.markdown(f"**{name} Network**")
     enable = st.sidebar.checkbox(f"Enable {name}", value=True, key=f"{name}_en")
@@ -35,11 +35,11 @@ def calculate_network(name, label_prefix, default_val):
         
     return enable, r_eq, r_series, r_par, is_parallel
 
-# --- HELPER: DRAWER ---
+# --- HELPER: DRAWER ---------------------------------------------------------------------------------------------------------------------------
 def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0):
     if not enable:
         # Draw a wire if disabled (Short) + Spacing
-        total_len = spacing + 3.0
+        total_len = spacing + 2.0
         if direction == "right": d.add(elm.Line().right().length(total_len))
         elif direction == "up": d.add(elm.Line().up().length(total_len))
         elif direction == "down": d.add(elm.Line().down().length(total_len))
@@ -82,7 +82,7 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
             d.add(elm.Line().right(width_offset).to(end_point))
         d.pop()
 
-# --- STAGE 1 INPUTS ---
+# --- STAGE 1 INPUTS ---------------------------------------------------------------------------------------------------------------------------
 st.sidebar.divider()
 st.sidebar.header("Stage 1 Parameters")
 s1_rg_en, s1_rg_total, s1_rg_s, s1_rg_p, s1_rg_is_par = calculate_network("Stage 1 Gate", "G", 10000.0)
@@ -96,7 +96,7 @@ s1_rd_en, s1_rd_total, s1_rd_s, s1_rd_p, s1_rd_is_par = calculate_network("Stage
 s1_rs_en, s1_rs_total, s1_rs_s, s1_rs_p, s1_rs_is_par = calculate_network("Stage 1 Source", "S", 1000.0)
 
 
-# --- STAGE 2 INPUTS ---
+# --- STAGE 2 INPUTS ---------------------------------------------------------------------------------------------------------------------------
 st.sidebar.divider()
 enable_stage_2 = st.sidebar.checkbox("Enable Stage 2 (Cascade)", value=False)
 
@@ -113,7 +113,7 @@ if enable_stage_2:
     s2_rd_en, s2_rd_total, s2_rd_s, s2_rd_p, s2_rd_is_par = calculate_network("Stage 2 Drain", "D", 5000.0)
     s2_rs_en, s2_rs_total, s2_rs_s, s2_rs_p, s2_rs_is_par = calculate_network("Stage 2 Source", "S", 500.0)
 
-# --- MATH ENGINE ---
+# --- MATH ENGINE ---------------------------------------------------------------------------------------------------------------------------
 gm = 0.005 
 av1 = 0
 if s1_rd_total > 0:
@@ -127,12 +127,12 @@ if enable_stage_2 and s2_rd_total > 0:
 
 total_gain = av1 * (av2 if enable_stage_2 else 1)
 
-# --- DRAWING ENGINE ---
+# --- DRAWING ENGINE -------------------------------------------------------------
 st.subheader("Circuit Schematic")
 d = schemdraw.Drawing()
 d.config(unit=zoom, fontsize=font_size)
 
-# --- DRAW STAGE 1 ---
+# --- DRAW STAGE 1 ---------------------------------------------------------------
 # 1. Ground
 d.add(elm.Ground())
 
@@ -188,7 +188,7 @@ d.add(elm.Label().label('$V_{out1}$', loc='top'))
     
 vout1_node = d.here 
 
-# --- DRAW STAGE 2 ---
+# --- DRAW STAGE 2 ---------------------------------------------------------------------------------------------------------------------------
 if enable_stage_2:
     d.move_from(vout1_node, dx=0, dy=0)
     
@@ -246,7 +246,7 @@ if enable_stage_2:
     d.add(elm.Dot(open=True))
     d.add(elm.Label().label('$V_{out2}$', loc='top'))
 
-# --- RENDER ---
+# --- RENDER ---------------------------------------------------------------------------------------------------------------------------
 schem_fig = d.draw()
 
 if schem_fig.fig:
@@ -259,7 +259,7 @@ if schem_fig.fig:
 else:
     st.pyplot(schem_fig)
 
-# --- RESULTS ---
+# --- RESULTS ---------------------------------------------------------------------------------------------------------------------------
 st.divider()
 
 g1, g2, g3 = st.columns(3)
