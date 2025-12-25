@@ -10,8 +10,6 @@ st.title("Interactive CMOS Amplifier Designer (Multi-Stage)")
 # --- 2. SIDEBAR PARAMETERS ---
 st.sidebar.header("Global Settings")
 
-# PRESET DEFAULTS (Number Inputs with +/- buttons)
-# Columns for tighter UI
 col_g1, col_g2 = st.sidebar.columns(2)
 with col_g1:
     zoom = st.number_input("Schematic Scale", value=1.75, step=0.25)
@@ -19,16 +17,15 @@ with col_g1:
 with col_g2:
     font_size = st.number_input("Text Size", value=8, step=1)
     
-st.sidebar.markdown("**Canvas Dimensions**")
+st.sidebar.markdown("**Canvas Dimensions (Shrink White Box)**")
 col_c1, col_c2 = st.sidebar.columns(2)
 with col_c1:
-    can_w = st.number_input("Width (in)", value=10.0, step=0.5)
+    can_w = st.number_input("Width (in)", value=8.0, step=0.5)
 with col_c2:
-    can_h = st.number_input("Height (in)", value=6.0, step=0.5)
+    can_h = st.number_input("Height (in)", value=5.0, step=0.5)
 
 st.sidebar.divider()
 st.sidebar.header("MOSFET Fixes")
-# Forced defaults as requested
 mosfet_theta = 180 
 mosfet_mirror = True 
 st.sidebar.caption(f"Locked: Rotate {mosfet_theta}°, Mirror=True")
@@ -55,7 +52,10 @@ def calculate_network(name, label_prefix, default_val):
     return enable, r_eq, r_series, r_par, is_parallel
 
 # --- HELPER: DRAWER ---
-def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0):
+def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="right", spacing=1.0, par_dir="left"):
+    """
+    par_dir: Controls which side the parallel loop draws on ("left" or "right").
+    """
     if not enable:
         total_len = spacing + 3.0
         if direction == "right": d.add(elm.Line().right().length(total_len))
@@ -86,13 +86,22 @@ def draw_resistor_network(d, enable, is_parallel, r_s, r_p, label, direction="ri
         width_offset = 1.8 
         
         if direction == "right":
+            # For horizontal resistors, up/down is the parallel offset
             d.add(elm.Line().up(width_offset)) 
             d.add(elm.Resistor().right().label(lbl_p)) 
             d.add(elm.Line().down(width_offset).to(end_point))
+            
         elif direction == "up":
-            d.add(elm.Line().left(width_offset)) 
-            d.add(elm.Resistor().up().label(lbl_p))
-            d.add(elm.Line().right(width_offset).to(end_point))
+            # For vertical resistors (Drain), we can choose Left or Right side
+            if par_dir == "right":
+                d.add(elm.Line().right(width_offset)) 
+                d.add(elm.Resistor().up().label(lbl_p))
+                d.add(elm.Line().left(width_offset).to(end_point))
+            else:
+                d.add(elm.Line().left(width_offset)) 
+                d.add(elm.Resistor().up().label(lbl_p))
+                d.add(elm.Line().right(width_offset).to(end_point))
+                
         elif direction == "down":
             d.add(elm.Line().left(width_offset))
             d.add(elm.Resistor().down().label(lbl_p))
@@ -159,7 +168,7 @@ d.add(elm.Dot())
 d.push()
 draw_resistor_network(d, s1_rg_en, s1_rg_is_par, s1_rg_s, s1_rg_p, "G", direction="right", spacing=wire_len)
 
-# Gate Divider
+# Gate Divider (Conditional Spacing)
 if s1_add_gate_div:
     d.push()
     d.add(elm.Line().right(0.5)) 
@@ -167,15 +176,13 @@ if s1_add_gate_div:
     d.add(elm.Line().down().length(wire_len))
     d.add(elm.Ground())
     d.pop()
-
-# EXTRA SPACING BEFORE MOSFET (Requested by User)
-d.add(elm.Line().right().length(1.0))
+    
+    # *** FIX: Extra spacing ONLY when Divider is ON ***
+    d.add(elm.Line().right().length(1.0))
 
 # MOSFET M1
-# <--- CHANGE M1 LABEL OFFSET HERE: ofst=(x, y)
 Q1 = d.add(elm.NFet().theta(180).flip().anchor('gate').label('$M_1$', ofst=(1.5, -1.0)))
 
-# <--- CHANGE G/D/S LABEL OFFSETS HERE: ofst=(x, y)
 d.add(elm.Label().at(Q1.gate).label('G', loc='left', ofst=(-0.2, -0.6), color='blue'))
 d.add(elm.Label().at(Q1.drain).label('D', loc='bottom', ofst=(0.5, 0.5), color='blue'))
 d.add(elm.Label().at(Q1.source).label('S', loc='top', ofst=(0.5, 0), color='blue'))
@@ -189,10 +196,10 @@ d.add(elm.Line().down().length(wire_len))
 d.add(elm.Ground())
 d.pop()
 
-# Drain Network
+# Drain Network (FIX: par_dir="right" pushes parallel R to the right)
 d.move_from(Q1.drain, dx=0, dy=0)
 d.add(elm.Line().up().length(wire_len)) 
-draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D", direction="up", spacing=0)
+draw_resistor_network(d, s1_rd_en, s1_rd_is_par, s1_rd_s, s1_rd_p, "D", direction="up", spacing=0, par_dir="right")
 d.add(elm.Line().up().length(wire_len)) 
 d.add(elm.Vdd().label('$V_{DD}$'))
 
@@ -207,9 +214,8 @@ vout1_node = d.here
 if enable_stage_2:
     d.move_from(vout1_node, dx=0, dy=0)
     
-    # Interstage Coupling - DYNAMIC WIDTH
+    # Interstage Coupling
     if interstage_type == "Direct Wire":
-        # Compact mode for wire
         d.add(elm.Line().right().length(3.0)) 
     elif interstage_type == "Resistor":
         d.add(elm.Line().right().length(1.5))
@@ -248,10 +254,10 @@ if enable_stage_2:
     d.add(elm.Ground())
     d.pop()
     
-    # Stage 2 Drain
+    # Stage 2 Drain (Left parallel is fine here as it's far from gate)
     d.move_from(Q2.drain, dx=0, dy=0)
     d.add(elm.Line().up().length(wire_len)) 
-    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D", direction="up", spacing=0)
+    draw_resistor_network(d, s2_rd_en, s2_rd_is_par, s2_rd_s, s2_rd_p, "D", direction="up", spacing=0, par_dir="left")
     d.add(elm.Line().up().length(wire_len)) 
     d.add(elm.Vdd().label('$V_{DD}$'))
     
@@ -266,10 +272,12 @@ schem_fig = d.draw()
 if schem_fig.fig:
     # Use USER DEFINED Canvas Size
     schem_fig.fig.set_size_inches(can_w, can_h) 
-    schem_fig.fig.subplots_adjust(left=0.02, bottom=0.02, right=0.98, top=0.98)
-    st.pyplot(schem_fig.fig)
+    
+    # FIX: use_container_width=False forces the image to respect the dimensions above
+    # instead of stretching to fill the page width.
+    st.pyplot(schem_fig.fig, use_container_width=False)
 else:
-    st.pyplot(schem_fig)
+    st.pyplot(schem_fig, use_container_width=False)
 
 # --- RESULTS ---
 st.divider()
